@@ -61,6 +61,8 @@ static int sort_stdin(void)
 		puts(lines->text);
 		lines = lines->next;
 	}
+	mem_pool_discard(&lines_pool, 0);
+	strbuf_release(&sb);
 	return 0;
 }
 
