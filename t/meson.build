@@ -1146,7 +1146,6 @@ benchmarks = [
   'perf/p0006-read-tree-checkout.sh',
   'perf/p0007-write-cache.sh',
   'perf/p0008-odb-fsync.sh',
-  'perf/p0071-sort.sh',
   'perf/p0090-cache-tree.sh',
   'perf/p0100-globbing.sh',
   'perf/p1006-cat-file.sh',
