@@ -1474,6 +1474,24 @@ static struct combine_diff_path *find_paths_multitree(
 
 	strbuf_release(&base);
 	free(parents_oid);
+
+	/* Match the prefix filtering used by the pairwise scan. */
+	if (opt->prefix) {
+		struct combine_diff_path **tail = &paths;
+
+		while (*tail) {
+			struct combine_diff_path *p = *tail;
+
+			if (starts_with(p->path, opt->prefix)) {
+				tail = &p->next;
+				continue;
+			}
+			*tail = p->next;
+			for (i = 0; i < nparent; i++)
+				free(p->parent[i].path);
+			free(p);
+		}
+	}
 	return paths;
 }
 

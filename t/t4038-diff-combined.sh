@@ -652,4 +652,25 @@ test_expect_success 'combined raw relative diff follows an outside rename source
 	test_cmp expect actual
 '
 
+test_expect_success 'fast combined relative diff excludes outside paths' '
+	ours_oid=$(git -C cross-prefix rev-parse HEAD^:here/file) &&
+	merged_oid=$(git -C cross-prefix rev-parse HEAD:here/file) &&
+	printf "::100644 000000 100644 %s %s %s MA\tfile\tfile\tfile\n" \
+		"$ours_oid" "$ZERO_OID" "$merged_oid" >expect &&
+	git -C cross-prefix diff-tree --no-commit-id -c --raw --no-renames \
+		--combined-all-paths --relative=here/ HEAD >actual &&
+	test_cmp expect actual
+'
+
+test_expect_success 'combined diff keeps explicit relative prefixes literal' '
+	git -C cross-prefix diff HEAD^ HEAD --relative=here// >actual &&
+	test_must_be_empty actual &&
+	git -C cross-prefix diff-tree --no-commit-id --cc -M \
+		--combined-all-paths --relative=here// HEAD >actual &&
+	test_must_be_empty actual &&
+	git -C cross-prefix diff-tree --no-commit-id --cc --no-renames \
+		--combined-all-paths --relative=here// HEAD >actual &&
+	test_must_be_empty actual
+'
+
 test_done
