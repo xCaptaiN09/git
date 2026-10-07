@@ -902,6 +902,14 @@ static void reuse_combine_diff(struct sline *sline, unsigned long cnt,
 	sline->p_lno[i] = sline->p_lno[j];
 }
 
+static const char *strip_relative_prefix(const struct diff_options *opt,
+					const char *path)
+{
+	if (opt->prefix && skip_prefix(path, opt->prefix, &path) && *path == '/')
+		path++;
+	return path;
+}
+
 static void dump_quoted_path(const char *head,
 			     const char *prefix,
 			     const char *path,
@@ -932,6 +940,7 @@ static void show_combined_header(struct combine_diff_path *elem,
 	const char *b_prefix = opt->b_prefix ? opt->b_prefix : "b/";
 	const char *c_meta = diff_get_color_opt(opt, DIFF_METAINFO);
 	const char *c_reset = diff_get_color_opt(opt, DIFF_RESET);
+	const char *name = strip_relative_prefix(opt, elem->path);
 	const char *abb;
 	int added = 0;
 	int deleted = 0;
@@ -942,7 +951,7 @@ static void show_combined_header(struct combine_diff_path *elem,
 		show_log(rev);
 
 	dump_quoted_path(dense ? "diff --cc " : "diff --combined ",
-			 "", elem->path, line_prefix, c_meta, c_reset);
+			 "", name, line_prefix, c_meta, c_reset);
 	printf("%s%sindex ", line_prefix, c_meta);
 	for (i = 0; i < num_parent; i++) {
 		abb = repo_find_unique_abbrev(the_repository,
@@ -987,6 +996,7 @@ static void show_combined_header(struct combine_diff_path *elem,
 			const char *path = elem->parent[i].path ?
 					   elem->parent[i].path :
 					   elem->path;
+			path = strip_relative_prefix(opt, path);
 			if (elem->parent[i].status == DIFF_STATUS_ADDED)
 				dump_quoted_path("--- ", "", "/dev/null",
 						 line_prefix, c_meta, c_reset);
@@ -999,14 +1009,14 @@ static void show_combined_header(struct combine_diff_path *elem,
 			dump_quoted_path("--- ", "", "/dev/null",
 					 line_prefix, c_meta, c_reset);
 		else
-			dump_quoted_path("--- ", a_prefix, elem->path,
+			dump_quoted_path("--- ", a_prefix, name,
 					 line_prefix, c_meta, c_reset);
 	}
 	if (deleted)
 		dump_quoted_path("+++ ", "", "/dev/null",
 				 line_prefix, c_meta, c_reset);
 	else
-		dump_quoted_path("+++ ", b_prefix, elem->path,
+		dump_quoted_path("+++ ", b_prefix, name,
 				 line_prefix, c_meta, c_reset);
 }
 
@@ -1270,9 +1280,10 @@ static void show_raw_diff(struct combine_diff_path *p, int num_parent, struct re
 			const char *path = p->parent[i].path ?
 					   p->parent[i].path :
 					   p->path;
+			path = strip_relative_prefix(opt, path);
 			write_name_quoted(path, stdout, inter_name_termination);
 		}
-	write_name_quoted(p->path, stdout, line_termination);
+	write_name_quoted(strip_relative_prefix(opt, p->path), stdout, line_termination);
 }
 
 /*

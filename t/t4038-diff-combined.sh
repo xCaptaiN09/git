@@ -492,6 +492,28 @@ test_expect_success '--combined-all-paths and --cc' '
 	test_cmp expect actual
 '
 
+test_expect_success '--combined-all-paths and --raw with relative renamed paths' '
+	cat <<-EOF >expect &&
+	::100644 100644 100644 $side1cf $side2cf $mergedf RR	side1c	side2c	merged
+	EOF
+	git diff-tree -c -M --raw --combined-all-paths \
+		--relative=filename- HEAD >actual.tmp &&
+	sed 1d <actual.tmp >actual &&
+	test_cmp expect actual
+'
+
+test_expect_success '--combined-all-paths and --cc with relative renamed paths' '
+	cat <<-\EOF >expect &&
+	--- a/side1c
+	--- a/side2c
+	+++ b/merged
+	EOF
+	git diff-tree --cc -M --combined-all-paths \
+		--relative=filename- HEAD >actual.tmp &&
+	grep ^[-+][-+][-+] <actual.tmp >actual &&
+	test_cmp expect actual
+'
+
 test_expect_success FUNNYNAMES 'setup for --combined-all-paths with funny names' '
 	git branch side1d &&
 	git branch side2d &&
