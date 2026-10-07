@@ -492,6 +492,28 @@ test_expect_success '--combined-all-paths and --cc' '
 	test_cmp expect actual
 '
 
+test_expect_success '--combined-all-paths and --raw with relative renamed paths' '
+	cat <<-EOF >expect &&
+	::100644 100644 100644 $side1cf $side2cf $mergedf RR	side1c	side2c	merged
+	EOF
+	git diff-tree -c -M --raw --combined-all-paths \
+		--relative=filename- HEAD >actual.tmp &&
+	sed 1d <actual.tmp >actual &&
+	test_cmp expect actual
+'
+
+test_expect_success '--combined-all-paths and --cc with relative renamed paths' '
+	cat <<-\EOF >expect &&
+	--- a/side1c
+	--- a/side2c
+	+++ b/merged
+	EOF
+	git diff-tree --cc -M --combined-all-paths \
+		--relative=filename- HEAD >actual.tmp &&
+	grep ^[-+][-+][-+] <actual.tmp >actual &&
+	test_cmp expect actual
+'
+
 test_expect_success FUNNYNAMES 'setup for --combined-all-paths with funny names' '
 	git branch side1d &&
 	git branch side2d &&
@@ -540,6 +562,93 @@ test_expect_success FUNNYNAMES '--combined-all-paths and --cc and funny names' '
 	EOF
 	git diff-tree --cc -M --combined-all-paths HEAD >actual.tmp &&
 	grep ^[-+][-+][-+] <actual.tmp >actual &&
+	test_cmp expect actual
+'
+
+test_expect_success 'setup rename across relative prefix' '
+	test_create_repo cross-prefix &&
+	(
+		cd cross-prefix &&
+		mkdir here there &&
+		test_seq 1 8 >here/file &&
+		echo base >there/extra &&
+		git add here/file there/extra &&
+		git commit -m base &&
+		git tag base &&
+		git switch -c ours &&
+		test_seq 1 10 >here/file &&
+		echo ours >there/extra &&
+		git add here/file there/extra &&
+		git commit -m ours &&
+		git switch -c theirs base &&
+		git mv here/file there/file &&
+		test_seq 1 9 >there/file &&
+		echo ten >>there/file &&
+		echo theirs >there/extra &&
+		git add there/file there/extra &&
+		git commit -m theirs &&
+		git switch ours &&
+		test_must_fail git merge --no-commit theirs &&
+		git rm -f there/file &&
+		mkdir -p here &&
+		test_seq 1 9 >here/file &&
+		echo ten >>here/file &&
+		echo eleven >>here/file &&
+		echo merged >there/extra &&
+		git add here/file there/extra &&
+		git commit -m merged
+	)
+'
+
+test_expect_success 'combined relative diff excludes an outside rename source' '
+	cat >expect <<-\EOF &&
+	diff --cc file
+	--- a/file
+	--- /dev/null
+	+++ b/file
+	EOF
+	git -C cross-prefix diff-tree --no-commit-id --cc -M \
+		--combined-all-paths --relative=here/ HEAD >actual.tmp &&
+	sed -n "/^diff --cc /p; /^--- /p; /^+++ /p" actual.tmp >actual &&
+	test_cmp expect actual
+'
+
+test_expect_success 'combined raw relative diff excludes an outside rename source' '
+	ours_oid=$(git -C cross-prefix rev-parse HEAD^:here/file) &&
+	merged_oid=$(git -C cross-prefix rev-parse HEAD:here/file) &&
+	printf "::100644 000000 100644 %s %s %s MA\tfile\tfile\tfile\n" \
+		"$ours_oid" "$ZERO_OID" "$merged_oid" >expect &&
+	git -C cross-prefix diff-tree --no-commit-id -c -M --raw \
+		--combined-all-paths --relative=here/ HEAD >actual &&
+	test_cmp expect actual
+'
+
+test_expect_success 'combined relative diff follows an outside rename source' '
+	cat >expect <<-\EOF &&
+	diff --cc file
+	--- a/file
+	--- a/../there/file
+	+++ b/file
+	EOF
+	git -C cross-prefix diff-tree --no-commit-id --cc -M --follow \
+		--combined-all-paths --relative=here/ HEAD -- here/file >actual.tmp &&
+	sed -n "/^diff --cc /p; /^--- /p; /^+++ /p" actual.tmp >actual &&
+	test_cmp expect actual
+'
+
+test_expect_success 'combined raw relative diff follows an outside rename source' '
+	ours_oid=$(git -C cross-prefix rev-parse HEAD^:here/file) &&
+	theirs_oid=$(git -C cross-prefix rev-parse HEAD^2:there/file) &&
+	merged_oid=$(git -C cross-prefix rev-parse HEAD:here/file) &&
+	printf "::100644 100644 100644 %s %s %s MR\tfile\t../there/file\tfile\n" \
+		"$ours_oid" "$theirs_oid" "$merged_oid" >expect &&
+	git -C cross-prefix diff-tree --no-commit-id -c -M --follow --raw \
+		--combined-all-paths --relative=here/ HEAD -- here/file >actual &&
+	test_cmp expect actual &&
+	printf "::100644 100644 100644 %s %s %s MR\0file\0../there/file\0file\0" \
+		"$ours_oid" "$theirs_oid" "$merged_oid" >expect &&
+	git -C cross-prefix diff-tree --no-commit-id -c -M --follow --raw -z \
+		--combined-all-paths --relative=here/ HEAD -- here/file >actual &&
 	test_cmp expect actual
 '
 

@@ -223,7 +223,7 @@ test_expect_success 'diff --relative --name-only with change in subdir' '
 	test_cmp expected out
 '
 
-test_expect_failure 'diff --relative with change in subdir' '
+test_expect_success 'diff --relative with change in subdir' '
 	git switch br3 &&
 	br1_blob=$(git rev-parse --short --verify br1:subdir/file0) &&
 	br3_blob=$(git rev-parse --short --verify br3:subdir/file0) &&
@@ -242,6 +242,44 @@ test_expect_failure 'diff --relative with change in subdir' '
 	++>>>>>>> br1
 	EOF
 	git -C subdir diff --relative >out &&
+	test_cmp expected out &&
+	git diff --relative=subdir >out &&
+	test_cmp expected out &&
+	git diff --relative=subdir/ >out &&
+	test_cmp expected out &&
+	sed "s,file0,dir/file0,g" expected >expected-short &&
+	git diff --relative=sub >out &&
+	test_cmp expected-short out &&
+	sed "s,file0,subdir/file0,g" expected >expected-full &&
+	git diff --relative=subdir --no-relative -- subdir/file0 >out &&
+	test_cmp expected-full out
+'
+
+test_expect_success 'combined raw diff with relative paths' '
+	git switch br3 &&
+	br1_blob=$(git rev-parse --short --verify br1:subdir/file0) &&
+	br3_blob=$(git rev-parse --short --verify br3:subdir/file0) &&
+	test_when_finished "git merge --abort" &&
+	test_must_fail git merge br1 &&
+	printf "::100644 100644 100644 %s %s 0000000 MM\tfile0\n" \
+		"$br3_blob" "$br1_blob" >expected &&
+	git -C subdir diff --cc --raw --relative >out &&
+	test_cmp expected out &&
+	printf "::100644 100644 100644 %s %s 0000000 MM\0file0\0" \
+		"$br3_blob" "$br1_blob" >expected &&
+	git diff --cc --raw -z --relative=subdir >out &&
+	test_cmp expected out
+'
+
+test_expect_success 'combined raw diff lists all relative paths' '
+	git switch br3 &&
+	br1_blob=$(git rev-parse --short --verify br1:subdir/file0) &&
+	br3_blob=$(git rev-parse --short --verify br3:subdir/file0) &&
+	test_when_finished "git merge --abort" &&
+	test_must_fail git merge br1 &&
+	printf "::100644 100644 100644 %s %s 0000000 MM\tfile0\tfile0\tfile0\n" \
+		"$br3_blob" "$br1_blob" >expected &&
+	git diff --cc --raw --combined-all-paths --relative=subdir >out &&
 	test_cmp expected out
 '
 
@@ -252,6 +290,28 @@ test_expect_success 'diff --relative --cached with change in subdir' '
 	echo file0 >expected &&
 	git -C subdir diff --relative --name-only --cached >out &&
 	test_cmp expected out
+'
+
+test_expect_success FUNNYNAMES 'combined diff quotes relative paths' '
+	test_create_repo quoted &&
+	(
+		cd quoted &&
+		mkdir subdir &&
+		test_commit --no-tag base "subdir/quoted\"file" base &&
+		git switch -c side &&
+		test_commit --no-tag side "subdir/quoted\"file" side &&
+		git switch -c other HEAD^ &&
+		test_commit --no-tag other "subdir/quoted\"file" other &&
+		test_must_fail git merge side &&
+		cat >expected <<-\EOF &&
+		diff --cc "quoted\"file"
+		--- "a/quoted\"file"
+		+++ "b/quoted\"file"
+		EOF
+		git -C subdir diff --relative >out &&
+		sed -n "/^diff --cc /p; /^--- /p; /^+++ /p" out >actual &&
+		test_cmp expected actual
+	)
 '
 
 test_done

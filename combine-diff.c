@@ -2,6 +2,7 @@
 #define DISABLE_SIGN_COMPARE_WARNINGS
 
 #include "git-compat-util.h"
+#include "abspath.h"
 #include "odb.h"
 #include "commit.h"
 #include "convert.h"
@@ -10,6 +11,7 @@
 #include "environment.h"
 #include "hex.h"
 #include "object-name.h"
+#include "path.h"
 #include "quote.h"
 #include "xdiff-interface.h"
 #include "xdiff/xmacros.h"
@@ -902,19 +904,39 @@ static void reuse_combine_diff(struct sline *sline, unsigned long cnt,
 	sline->p_lno[i] = sline->p_lno[j];
 }
 
-static void dump_quoted_path(const char *head,
+static const char *relative_combined_path(const struct diff_options *opt,
+					 const char *path, struct strbuf *sb)
+{
+	if (!opt->prefix || is_absolute_path(path))
+		return path;
+
+	/* Match ordinary diff's literal-prefix handling inside the prefix. */
+	if (skip_prefix(path, opt->prefix, &path)) {
+		while (*path == '/')
+			path++;
+		return path;
+	}
+
+	return relative_path(path, opt->prefix, sb);
+}
+
+static void dump_quoted_path(const struct diff_options *opt,
+			     const char *head,
 			     const char *prefix,
 			     const char *path,
 			     const char *line_prefix,
 			     const char *c_meta, const char *c_reset)
 {
 	static struct strbuf buf = STRBUF_INIT;
+	struct strbuf relative = STRBUF_INIT;
 
+	path = relative_combined_path(opt, path, &relative);
 	strbuf_reset(&buf);
 	strbuf_addstr(&buf, line_prefix);
 	strbuf_addstr(&buf, c_meta);
 	strbuf_addstr(&buf, head);
 	quote_two_c_style(&buf, prefix, path, 0);
+	strbuf_release(&relative);
 	strbuf_addstr(&buf, c_reset);
 	puts(buf.buf);
 }
@@ -941,7 +963,7 @@ static void show_combined_header(struct combine_diff_path *elem,
 	if (rev->loginfo && !rev->no_commit_id)
 		show_log(rev);
 
-	dump_quoted_path(dense ? "diff --cc " : "diff --combined ",
+	dump_quoted_path(opt, dense ? "diff --cc " : "diff --combined ",
 			 "", elem->path, line_prefix, c_meta, c_reset);
 	printf("%s%sindex ", line_prefix, c_meta);
 	for (i = 0; i < num_parent; i++) {
@@ -988,25 +1010,25 @@ static void show_combined_header(struct combine_diff_path *elem,
 					   elem->parent[i].path :
 					   elem->path;
 			if (elem->parent[i].status == DIFF_STATUS_ADDED)
-				dump_quoted_path("--- ", "", "/dev/null",
+				dump_quoted_path(opt, "--- ", "", "/dev/null",
 						 line_prefix, c_meta, c_reset);
 			else
-				dump_quoted_path("--- ", a_prefix, path,
+				dump_quoted_path(opt, "--- ", a_prefix, path,
 						 line_prefix, c_meta, c_reset);
 		}
 	} else {
 		if (added)
-			dump_quoted_path("--- ", "", "/dev/null",
+			dump_quoted_path(opt, "--- ", "", "/dev/null",
 					 line_prefix, c_meta, c_reset);
 		else
-			dump_quoted_path("--- ", a_prefix, elem->path,
+			dump_quoted_path(opt, "--- ", a_prefix, elem->path,
 					 line_prefix, c_meta, c_reset);
 	}
 	if (deleted)
-		dump_quoted_path("+++ ", "", "/dev/null",
+		dump_quoted_path(opt, "+++ ", "", "/dev/null",
 				 line_prefix, c_meta, c_reset);
 	else
-		dump_quoted_path("+++ ", b_prefix, elem->path,
+		dump_quoted_path(opt, "+++ ", b_prefix, elem->path,
 				 line_prefix, c_meta, c_reset);
 }
 
@@ -1225,6 +1247,16 @@ static void show_patch_diff(struct combine_diff_path *elem, int num_parent,
 	free(sline);
 }
 
+static void write_combined_path(const struct diff_options *opt,
+				const char *path, int termination)
+{
+	struct strbuf relative = STRBUF_INIT;
+
+	path = relative_combined_path(opt, path, &relative);
+	write_name_quoted(path, stdout, termination);
+	strbuf_release(&relative);
+}
+
 static void show_raw_diff(struct combine_diff_path *p, int num_parent, struct rev_info *rev)
 {
 	struct diff_options *opt = &rev->diffopt;
@@ -1270,9 +1302,9 @@ static void show_raw_diff(struct combine_diff_path *p, int num_parent, struct re
 			const char *path = p->parent[i].path ?
 					   p->parent[i].path :
 					   p->path;
-			write_name_quoted(path, stdout, inter_name_termination);
+			write_combined_path(opt, path, inter_name_termination);
 		}
-	write_name_quoted(p->path, stdout, line_termination);
+	write_combined_path(opt, p->path, line_termination);
 }
 
 /*
