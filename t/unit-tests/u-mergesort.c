@@ -9,6 +9,11 @@ struct number {
 
 DEFINE_LIST_SORT(static, sort_numbers, struct number, next);
 
+static int get_next_count, set_next_count;
+
+DEFINE_LIST_SORT_DEBUG(static, sort_numbers_debug, struct number, next,
+		       get_next_count++, set_next_count++);
+
 static int compare_numbers(const struct number *a, const struct number *b)
 {
 	return (a->value > b->value) - (a->value < b->value);
@@ -102,4 +107,62 @@ void test_mergesort__random(void)
 	}
 	for (size_t i = 0; i < ARRAY_SIZE(sizes); i++)
 		check_sort(input, sizes[i]);
+}
+
+void test_mergesort__empty(void)
+{
+	check_sort(NULL, 0);
+}
+
+void test_mergesort__singleton(void)
+{
+	const int input[] = { 42 };
+
+	check_sort(input, ARRAY_SIZE(input));
+}
+
+void test_mergesort__reversed_pair(void)
+{
+	const int input[] = { 2, 1 };
+
+	check_sort(input, ARRAY_SIZE(input));
+}
+
+void test_mergesort__equal_pair(void)
+{
+	const int input[] = { 1, 1 };
+
+	check_sort(input, ARRAY_SIZE(input));
+}
+
+void test_mergesort__interleaved_runs(void)
+{
+	const int input[] = { 0, 2, 4, 6, 1, 3, 5, 7 };
+
+	check_sort(input, ARRAY_SIZE(input));
+}
+
+void test_mergesort__mixed_values(void)
+{
+	const int input[] = { INT_MAX, -1, 0, INT_MIN, -1, INT_MAX, 0 };
+
+	check_sort(input, ARRAY_SIZE(input));
+}
+
+void test_mergesort__debug_hooks(void)
+{
+	struct number nodes[] = {
+		{ .value = 2 },
+		{ .value = 1 },
+	};
+	struct number *list = &nodes[0];
+
+	nodes[0].next = &nodes[1];
+	get_next_count = set_next_count = 0;
+	sort_numbers_debug(&list, compare_numbers);
+	cl_assert_equal_p(list, &nodes[1]);
+	cl_assert_equal_p(list->next, &nodes[0]);
+	cl_assert_equal_p(list->next->next, NULL);
+	cl_assert_gt_i(get_next_count, 0);
+	cl_assert_gt_i(set_next_count, 0);
 }
