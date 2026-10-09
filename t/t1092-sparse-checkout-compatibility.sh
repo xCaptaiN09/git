@@ -486,6 +486,47 @@ test_expect_success 'checkout with modified sparse directory' '
 	test_all_match git checkout base
 '
 
+test_expect_success 'checkout protects untracked files inside sparse cone' '
+	init_repos &&
+	git -C initial-repo rev-parse base >expect-head &&
+	test_write_lines local >expect-untracked &&
+	test_write_lines a >expect-tracked &&
+	test_write_lines staged >expect-staged &&
+	test_write_lines refs/heads/base >expect-branch &&
+	for repo in full-checkout sparse-checkout sparse-index
+	do
+		(
+			cd "$repo" &&
+			git checkout -b new-file &&
+			test_write_lines incoming >deep/new-file &&
+			test_write_lines incoming >deep/other-file &&
+			test_write_lines changed >deep/a &&
+			git add deep/new-file deep/other-file deep/a &&
+			git commit -m "add a file and change a tracked file" &&
+			git checkout base &&
+			test_write_lines local >deep/new-file &&
+			test_write_lines local >deep/other-file &&
+			test_write_lines staged >a &&
+			git add a &&
+			git write-tree >"../$repo-index-before"
+		) || return 1
+	done &&
+	test_all_match test_must_fail git checkout new-file &&
+	for repo in full-checkout sparse-checkout sparse-index
+	do
+		git -C "$repo" rev-parse HEAD >actual-head &&
+		test_cmp expect-head actual-head &&
+		git -C "$repo" symbolic-ref HEAD >actual-branch &&
+		test_cmp expect-branch actual-branch &&
+		test_cmp expect-untracked "$repo/deep/new-file" &&
+		test_cmp expect-untracked "$repo/deep/other-file" &&
+		test_cmp expect-tracked "$repo/deep/a" &&
+		test_cmp expect-staged "$repo/a" &&
+		git -C "$repo" write-tree >actual-index &&
+		test_cmp "$repo-index-before" actual-index || return 1
+	done
+'
+
 test_expect_success 'checkout orphan then non-orphan' '
 	init_repos &&
 

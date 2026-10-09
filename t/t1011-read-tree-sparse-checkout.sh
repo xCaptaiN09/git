@@ -263,12 +263,15 @@ test_expect_success 'read-tree --reset removes outside worktree' '
 '
 
 test_expect_success 'print warnings when some worktree updates disabled' '
-	echo sub >.git/info/sparse-checkout &&
-	git checkout -f init &&
+	echo init.t >.git/info/sparse-checkout &&
+	git checkout -f top &&
 	mkdir sub &&
-	touch sub/added sub/addedtoo &&
+	test_write_lines local >sub/added &&
+	test_write_lines local >sub/addedtoo &&
+	echo sub >.git/info/sparse-checkout &&
+	# Keep skip-worktree bits on the materialized paths to test the warning.
 	# Use -q to suppress "Previous HEAD position" and "Head is now at" msgs
-	git checkout -q top 2>actual &&
+	git -c sparse.expectFilesOutsideOfPatterns=true checkout -q top 2>actual &&
 	cat >expected <<\EOF &&
 warning: The following paths were already present and thus not updated despite sparse patterns:
 	sub/added
@@ -276,7 +279,10 @@ warning: The following paths were already present and thus not updated despite s
 
 After fixing the above paths, you may want to run `git sparse-checkout reapply`.
 EOF
-	test_cmp expected actual
+	test_cmp expected actual &&
+	test_write_lines local >expected-content &&
+	test_cmp expected-content sub/added &&
+	test_cmp expected-content sub/addedtoo
 '
 
 test_expect_success 'checkout without --ignore-skip-worktree-bits' '

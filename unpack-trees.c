@@ -2058,8 +2058,15 @@ int unpack_trees(unsigned len, struct tree_desc *t, struct unpack_trees_options 
 			 * correct CE_NEW_SKIP_WORKTREE
 			 */
 			if (ce->ce_flags & CE_ADDED &&
-			    verify_absent(ce, WARNING_SPARSE_ORPHANED_NOT_OVERWRITTEN, o))
+			    verify_absent(ce,
+				ERROR_WOULD_LOSE_UNTRACKED_OVERWRITTEN, o))
 				ret = 1;
+		}
+		if (ret)
+			goto return_failed;
+
+		for (i = 0; i < o->internal.result.cache_nr; i++) {
+			struct cache_entry *ce = o->internal.result.cache[i];
 
 			if (apply_sparse_checkout(&o->internal.result, ce, o))
 				ret = 1;
